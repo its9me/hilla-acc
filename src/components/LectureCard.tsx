@@ -11,6 +11,7 @@ import {
   Link2,
 } from 'lucide-react';
 import type { DriveEntry } from '../types/drive';
+import { getLectureDownloadProps } from '../utils/lectures';
 import { FileTypeIcon, getCategorySurfaceClass } from './FileTypeIcon';
 
 interface LectureCardProps {
@@ -40,6 +41,7 @@ export function LectureCard({
 }: LectureCardProps) {
   const [thumbFailed, setThumbFailed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const downloadProps = getLectureDownloadProps(entry);
 
   const handleCopy = () => {
     if (!onCopyLink) return;
@@ -151,9 +153,10 @@ export function LectureCard({
             )}
 
             <a
-              href={entry.downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={downloadProps.href}
+              download={downloadProps.downloadName}
+              target={downloadProps.isLocal ? undefined : '_blank'}
+              rel={downloadProps.isLocal ? undefined : 'noopener noreferrer'}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap"
             >
               <Download className="w-3.5 h-3.5" aria-hidden="true" />
@@ -324,9 +327,10 @@ export function LectureCard({
 
             <div className="flex items-center gap-1.5">
               <a
-                href={entry.downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
+                href={downloadProps.href}
+                download={downloadProps.downloadName}
+                target={downloadProps.isLocal ? undefined : '_blank'}
+                rel={downloadProps.isLocal ? undefined : 'noopener noreferrer'}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap"
               >
                 <Download className="w-3.5 h-3.5" aria-hidden="true" />

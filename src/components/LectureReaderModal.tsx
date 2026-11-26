@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import type { DriveCatalog, DriveEntry } from '../types/drive';
+import { getLectureDownloadProps, getLocalLectureUrl } from '../utils/lectures';
 import { FileTypeIcon } from './FileTypeIcon';
 import { LectureAIAssistant } from './LectureAIAssistant';
 
@@ -59,6 +60,10 @@ export function LectureReaderModal({
   const [noteSavedNotice, setNoteSavedNotice] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [panelTab, setPanelTab] = useState<'ai' | 'notes'>('ai');
+  const [useDriveViewer, setUseDriveViewer] = useState(false);
+
+  const localUrl = getLocalLectureUrl(item.entry.id);
+  const downloadProps = getLectureDownloadProps(item.entry);
 
   const currentIndex = playlist.findIndex((p) => p.entry.id === item.entry.id);
   const prevItem = currentIndex > 0 ? playlist[currentIndex - 1] : null;
@@ -68,6 +73,7 @@ export function LectureReaderModal({
   useEffect(() => {
     setIframeLoaded(false);
     setLinkCopied(false);
+    setUseDriveViewer(false);
   }, [item.entry.id]);
 
   useEffect(() => {
@@ -156,23 +162,37 @@ export function LectureReaderModal({
             </button>
 
             <a
-              href={item.entry.downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
+              href={downloadProps.href}
+              download={downloadProps.downloadName}
+              target={downloadProps.isLocal ? undefined : '_blank'}
+              rel={downloadProps.isLocal ? undefined : 'noopener noreferrer'}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-white bg-teal-700 hover:bg-teal-800 rounded-lg transition-colors whitespace-nowrap shrink-0"
             >
               <Download className="w-4 h-4" aria-hidden="true" />
               <span>تحميل</span>
             </a>
 
+            {localUrl && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIframeLoaded(false);
+                  setUseDriveViewer((v) => !v);
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
+              >
+                <span>{useDriveViewer ? 'العرض السريع' : 'عارض Drive'}</span>
+              </button>
+            )}
+
             <a
-              href={item.entry.viewUrl}
+              href={localUrl && !useDriveViewer ? localUrl : item.entry.viewUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
             >
               <ExternalLink className="w-4 h-4" aria-hidden="true" />
-              <span>فتح في Drive</span>
+              <span>{localUrl && !useDriveViewer ? 'فتح مباشر' : 'فتح في Drive'}</span>
             </a>
 
             <button
@@ -200,22 +220,34 @@ export function LectureReaderModal({
         <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden overscroll-contain">
           {/* Interactive Preview Stage */}
           <div className="relative h-[42vh] min-h-[250px] lg:h-auto lg:flex-1 bg-slate-100 dark:bg-slate-950 lg:min-h-0 shrink-0 lg:shrink">
-            {!iframeLoaded && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 dark:bg-slate-950 z-10">
-                <div className="w-8 h-8 border-2 border-teal-700 dark:border-teal-400 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-slate-600 dark:text-slate-300">
-                  جاري تحميل معاينة المحاضرة...
-                </p>
+            {localUrl && !useDriveViewer && item.entry.category === 'image' ? (
+              <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
+                <img
+                  src={localUrl}
+                  alt={item.entry.title}
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+                />
               </div>
+            ) : (
+              <>
+                {!iframeLoaded && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 dark:bg-slate-950 z-10">
+                    <div className="w-8 h-8 border-2 border-teal-700 dark:border-teal-400 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      جاري تحميل معاينة المحاضرة...
+                    </p>
+                  </div>
+                )}
+                <iframe
+                  key={`${item.entry.id}-${useDriveViewer ? 'drive' : 'local'}`}
+                  src={localUrl && !useDriveViewer ? localUrl : item.entry.previewUrl}
+                  title={item.entry.title}
+                  className="w-full h-full border-0"
+                  allow="autoplay; fullscreen"
+                  onLoad={() => setIframeLoaded(true)}
+                />
+              </>
             )}
-            <iframe
-              key={item.entry.id}
-              src={item.entry.previewUrl}
-              title={item.entry.title}
-              className="w-full h-full border-0"
-              allow="autoplay; fullscreen"
-              onLoad={() => setIframeLoaded(true)}
-            />
           </div>
 
           {/* Study Companion Side Deck */}

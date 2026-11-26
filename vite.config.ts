@@ -57,7 +57,22 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,jpg,json}'],
+          globIgnores: ['lectures/**'],
           runtimeCaching: [
+            {
+              urlPattern: /\/lectures\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'local-lectures-cache',
+                expiration: {
+                  maxEntries: 60,
+                  maxAgeSeconds: 60 * 60 * 24 * 30,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
             {
               urlPattern: /^\/api\/drive\/.*/i,
               handler: 'NetworkFirst',

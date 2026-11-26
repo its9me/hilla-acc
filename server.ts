@@ -399,6 +399,31 @@ async function fetchDriveFileForAI(
     return { file: { mimeType: cached.mimeType, base64: cached.base64 }, note: '' };
   }
 
+  // Fast local disk lookup for lectures mirrored in public/lectures/
+  for (const candidate of [
+    { ext: 'pdf', mime: 'application/pdf' },
+    { ext: 'jpg', mime: 'image/jpeg' },
+    { ext: 'png', mime: 'image/png' },
+  ]) {
+    const localPath = path.join(__dirname, 'public', 'lectures', `${fileId}.${candidate.ext}`);
+    if (fs.existsSync(localPath)) {
+      try {
+        const stat = fs.statSync(localPath);
+        if (stat.size > 0 && stat.size <= MAX_AI_FILE_BYTES) {
+          const base64 = fs.readFileSync(localPath).toString('base64');
+          aiFileCache.set(fileId, {
+            mimeType: candidate.mime,
+            base64,
+            expiresAt: Date.now() + AI_FILE_CACHE_TTL_MS,
+          });
+          return { file: { mimeType: candidate.mime, base64 }, note: '' };
+        }
+      } catch {
+        // Fall through to Drive fetch if local read fails
+      }
+    }
+  }
+
   const lowerHint = mimeHint.toLowerCase();
   if (
     lowerHint.includes('folder') ||
