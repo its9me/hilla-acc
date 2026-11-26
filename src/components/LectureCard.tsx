@@ -11,7 +11,7 @@ import {
   Link2,
 } from 'lucide-react';
 import type { DriveEntry } from '../types/drive';
-import { getLectureDownloadProps } from '../utils/lectures';
+import { getLectureDownloadProps, getLocalLectureUrl } from '../utils/lectures';
 import { FileTypeIcon, getCategorySurfaceClass } from './FileTypeIcon';
 
 interface LectureCardProps {
@@ -42,6 +42,9 @@ export function LectureCard({
   const [thumbFailed, setThumbFailed] = useState(false);
   const [copied, setCopied] = useState(false);
   const downloadProps = getLectureDownloadProps(entry);
+  const localThumbUrl =
+    entry.category === 'image' ? getLocalLectureUrl(entry.id) : null;
+  const resolvedThumbUrl = localThumbUrl || entry.thumbnailUrl;
 
   const handleCopy = () => {
     if (!onCopyLink) return;
@@ -194,9 +197,9 @@ export function LectureCard({
         onClick={() => onOpen(entry)}
         className="relative aspect-[4/3] w-full bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-800 overflow-hidden text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
       >
-        {entry.thumbnailUrl && !thumbFailed ? (
+        {resolvedThumbUrl && !thumbFailed ? (
           <img
-            src={entry.thumbnailUrl}
+            src={resolvedThumbUrl}
             alt={entry.title}
             referrerPolicy="no-referrer"
             loading="lazy"

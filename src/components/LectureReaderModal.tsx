@@ -41,6 +41,17 @@ interface LectureReaderModalProps {
   onCopyLink: (id: string) => void;
 }
 
+function detectMobileBrowser(): boolean {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
+    return true;
+  }
+  return (
+    window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 1024
+  );
+}
+
 export function LectureReaderModal({
   item,
   playlist,
@@ -55,12 +66,16 @@ export function LectureReaderModal({
   onChangeNote,
   onCopyLink,
 }: LectureReaderModalProps) {
+  const [isMobile] = useState(() => detectMobileBrowser());
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [noteSavedNotice, setNoteSavedNotice] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [panelTab, setPanelTab] = useState<'ai' | 'notes'>('ai');
-  const [useDriveViewer, setUseDriveViewer] = useState(false);
+  const [mobileView, setMobileView] = useState<'preview' | 'companion'>('preview');
+  const [useDriveViewer, setUseDriveViewer] = useState(
+    () => detectMobileBrowser() && item.entry.category === 'pdf'
+  );
 
   const localUrl = getLocalLectureUrl(item.entry.id);
   const downloadProps = getLectureDownloadProps(item.entry);
@@ -73,8 +88,16 @@ export function LectureReaderModal({
   useEffect(() => {
     setIframeLoaded(false);
     setLinkCopied(false);
-    setUseDriveViewer(false);
-  }, [item.entry.id]);
+    setUseDriveViewer(isMobile && item.entry.category === 'pdf');
+  }, [item.entry.id, item.entry.category, isMobile]);
+
+  useEffect(() => {
+    if (iframeLoaded) return;
+    const timer = window.setTimeout(() => {
+      setIframeLoaded(true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [iframeLoaded, item.entry.id, useDriveViewer]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -172,14 +195,14 @@ export function LectureReaderModal({
               <span>تحميل</span>
             </a>
 
-            {localUrl && (
+            {localUrl && item.entry.category !== 'image' && (
               <button
                 type="button"
                 onClick={() => {
                   setIframeLoaded(false);
                   setUseDriveViewer((v) => !v);
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
               >
                 <span>{useDriveViewer ? 'العرض السريع' : 'عارض Drive'}</span>
               </button>
@@ -216,42 +239,125 @@ export function LectureReaderModal({
           </div>
         </div>
 
+        {/* Mobile View Switcher (Lecture Preview vs AI & Notes) */}
+        <div className="lg:hidden px-4 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/60 shrink-0">
+          <div
+            role="tablist"
+            aria-label="عرض المحاضرة أو المساعد"
+            className="grid grid-cols-2 gap-1 p-1 bg-slate-200/75 dark:bg-slate-800 rounded-xl"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === 'preview'}
+              onClick={() => setMobileView('preview')}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                mobileView === 'preview'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              معاينة المحاضرة
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mobileView === 'companion'}
+              onClick={() => setMobileView('companion')}
+              className={`inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                mobileView === 'companion'
+                  ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>المساعد والملاحظات</span>
+            </button>
+          </div>
+        </div>
+
         {/* Two-Zone Split Content */}
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-y-auto lg:overflow-hidden overscroll-contain">
+        <div className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
           {/* Interactive Preview Stage */}
-          <div className="relative h-[42vh] min-h-[250px] lg:h-auto lg:flex-1 bg-slate-100 dark:bg-slate-950 lg:min-h-0 shrink-0 lg:shrink">
-            {localUrl && !useDriveViewer && item.entry.category === 'image' ? (
-              <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
-                <img
-                  src={localUrl}
-                  alt={item.entry.title}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
-                />
+          <div
+            className={`${
+              mobileView === 'preview' ? 'flex' : 'hidden lg:flex'
+            } flex-col flex-1 min-h-0 bg-slate-100 dark:bg-slate-950`}
+          >
+            {/* Mobile & Quick-Open Strip for PDFs */}
+            {localUrl && item.entry.category !== 'image' && (
+              <div className="lg:hidden flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-xs shrink-0">
+                <a
+                  href={localUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 font-medium text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 rounded-lg whitespace-nowrap"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>فتح الملف كامل الشاشة</span>
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIframeLoaded(false);
+                    setUseDriveViewer((v) => !v);
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 rounded-lg whitespace-nowrap"
+                >
+                  <span>{useDriveViewer ? 'العرض السريع' : 'عارض Drive'}</span>
+                </button>
               </div>
-            ) : (
-              <>
-                {!iframeLoaded && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 dark:bg-slate-950 z-10">
-                    <div className="w-8 h-8 border-2 border-teal-700 dark:border-teal-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                      جاري تحميل معاينة المحاضرة...
-                    </p>
-                  </div>
-                )}
-                <iframe
-                  key={`${item.entry.id}-${useDriveViewer ? 'drive' : 'local'}`}
-                  src={localUrl && !useDriveViewer ? localUrl : item.entry.previewUrl}
-                  title={item.entry.title}
-                  className="w-full h-full border-0"
-                  allow="autoplay; fullscreen"
-                  onLoad={() => setIframeLoaded(true)}
-                />
-              </>
             )}
+
+            <div className="relative flex-1 min-h-0">
+              {localUrl && !useDriveViewer && item.entry.category === 'image' ? (
+                <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
+                  <img
+                    src={localUrl}
+                    alt={item.entry.title}
+                    className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
+                  />
+                </div>
+              ) : (
+                <>
+                  {!iframeLoaded && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 dark:bg-slate-950 z-10 p-4 text-center">
+                      <div className="w-8 h-8 border-2 border-teal-700 dark:border-teal-400 border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        جاري تحميل معاينة المحاضرة...
+                      </p>
+                      {localUrl && (
+                        <a
+                          href={localUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800 rounded-lg"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>فتح الملف مباشرة دون انتظار</span>
+                        </a>
+                      )}
+                    </div>
+                  )}
+                  <iframe
+                    key={`${item.entry.id}-${useDriveViewer ? 'drive' : 'local'}`}
+                    src={localUrl && !useDriveViewer ? localUrl : item.entry.previewUrl}
+                    title={item.entry.title}
+                    className="w-full h-full border-0"
+                    allow="autoplay; fullscreen"
+                    onLoad={() => setIframeLoaded(true)}
+                  />
+                </>
+              )}
+            </div>
           </div>
 
           {/* Study Companion Side Deck */}
-          <aside className="w-full lg:w-96 xl:w-[26rem] border-t lg:border-t-0 lg:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col shrink-0 min-h-[420px] lg:min-h-0 lg:h-full overflow-hidden">
+          <aside
+            className={`${
+              mobileView === 'companion' ? 'flex' : 'hidden lg:flex'
+            } w-full lg:w-96 xl:w-[26rem] border-t lg:border-t-0 lg:border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex-col shrink-0 flex-1 lg:flex-initial lg:h-full min-h-0 overflow-hidden`}
+          >
             <div className="p-4 sm:p-5 space-y-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
               {/* Navigation within playlist */}
               {playlist.length > 1 && (
