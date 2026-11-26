@@ -1,0 +1,6 @@
+{
+  "name": "منصة محاضرات قسم المحاسبة",
+  "description": "منصة جامعية لتصفح وقراءة وتحميل محاضرات قسم المحاسبة المرتبطة بمجلد Google Drive الرسمي لجميع المراحل الدراسية.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
