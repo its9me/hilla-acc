@@ -50,7 +50,7 @@ import {
 } from './utils/storage';
 
 const DEFAULT_ROOT_FOLDER_ID = '1XRkN1f8lmr-rv3cqS0AZpswOCOibiQHP';
-const HERO_IMAGE_SRC = '/src/assets/images/hero_accounting_library_1795715263542.jpg';
+const HERO_IMAGE_SRC = `${import.meta.env.BASE_URL}src/assets/images/hero_accounting_library_1795715263542.jpg`;
 
 type ActiveTab = 'all' | 'schedule' | 'saved' | string;
 type FileFilterCategory = 'all' | DriveFileCategory;
@@ -107,6 +107,7 @@ export default function App() {
   const [showScrollTop, setShowScrollTop] = useState<boolean>(false);
 
   const deepLinkHandledRef = useRef<boolean>(false);
+  const staticSubfoldersRef = useRef<Record<string, FolderListing>>({});
 
   // Study tracking
   const [progress, setProgress] = useState<StudyProgressMap>(() => loadStudyProgress());
@@ -189,12 +190,40 @@ export default function App() {
         const params = new URLSearchParams({ folderId });
         if (bypassCache) params.set('refresh', '1');
 
-        const res = await fetch(`/api/drive/catalog?${params.toString()}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'تعذر الاتصال بمجلد Google Drive');
+        let loadedFromApi = false;
+        try {
+          const res = await fetch(`/api/drive/catalog?${params.toString()}`);
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (!res.ok) {
+              throw new Error(data.error || 'تعذر الاتصال بمجلد Google Drive');
+            }
+            setCatalog(data as DriveCatalog);
+            loadedFromApi = true;
+          }
+        } catch (apiErr) {
+          if (folderId !== DEFAULT_ROOT_FOLDER_ID) {
+            throw apiErr;
+          }
         }
-        setCatalog(data as DriveCatalog);
+
+        if (!loadedFromApi) {
+          if (folderId !== DEFAULT_ROOT_FOLDER_ID) {
+            throw new Error('تغيير رابط Drive يتطلب تشغيل خادم التطبيق (Node.js).');
+          }
+          const fallbackRes = await fetch(`${import.meta.env.BASE_URL}catalog-fallback.json`);
+          if (!fallbackRes.ok) {
+            throw new Error('تعذر الاتصال بفهرس المحاضرات.');
+          }
+          const fallbackData = (await fallbackRes.json()) as DriveCatalog & {
+            subfolderMap?: Record<string, FolderListing>;
+          };
+          if (fallbackData.subfolderMap) {
+            staticSubfoldersRef.current = fallbackData.subfolderMap;
+          }
+          setCatalog(fallbackData);
+        }
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'حدث خطأ غير متوقع أثناء تحميل المحاضرات';
@@ -211,6 +240,28 @@ export default function App() {
     fetchCatalog(rootFolderId, false);
   }, [fetchCatalog, rootFolderId]);
 
+  const resolveStaticFolder = useCallback(
+    (folderId: string): FolderListing | null => {
+      if (staticSubfoldersRef.current[folderId]) {
+        return staticSubfoldersRef.current[folderId];
+      }
+      if (!catalog) return null;
+      for (const stage of catalog.stages) {
+        const matched = stage.subjects.find((s) => s.id === folderId);
+        if (matched) {
+          return {
+            folderId: matched.id,
+            folderTitle: matched.title,
+            entries: matched.entries,
+            fetchedAt: catalog.fetchedAt,
+          };
+        }
+      }
+      return null;
+    },
+    [catalog]
+  );
+
   const openSubfolder = useCallback(
     async (crumb: FolderCrumb, resetTrail = false) => {
       setFolderLoading(true);
@@ -220,19 +271,36 @@ export default function App() {
 
       try {
         const res = await fetch(`/api/drive/folder/${encodeURIComponent(crumb.id)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'تعذر فتح هذا المجلد');
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'تعذر فتح هذا المجلد');
+          }
+          setActiveFolderListing(data as FolderListing);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
         }
-        setActiveFolderListing(data as FolderListing);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const fallback = resolveStaticFolder(crumb.id);
+        if (fallback) {
+          setActiveFolderListing(fallback);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          return;
+        }
+        throw new Error('تعذر فتح هذا المجلد');
       } catch (err) {
-        setFolderError(err instanceof Error ? err.message : 'تعذر فتح المجلد');
+        const fallback = resolveStaticFolder(crumb.id);
+        if (fallback) {
+          setActiveFolderListing(fallback);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setFolderError(err instanceof Error ? err.message : 'تعذر فتح المجلد');
+        }
       } finally {
         setFolderLoading(false);
       }
     },
-    []
+    [resolveStaticFolder]
   );
 
   // Hydrate initial URL deep-link (?tab=..., ?subject=..., ?lecture=...) once catalog loads
@@ -331,18 +399,33 @@ export default function App() {
       setFolderError(null);
       try {
         const res = await fetch(`/api/drive/folder/${encodeURIComponent(target.id)}`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error || 'تعذر فتح المجلد');
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || 'تعذر فتح المجلد');
+          }
+          setActiveFolderListing(data as FolderListing);
+          return;
         }
-        setActiveFolderListing(data as FolderListing);
+        const fallback = resolveStaticFolder(target.id);
+        if (fallback) {
+          setActiveFolderListing(fallback);
+          return;
+        }
+        throw new Error('تعذر فتح المجلد');
       } catch (err) {
-        setFolderError(err instanceof Error ? err.message : 'تعذر فتح المجلد');
+        const fallback = resolveStaticFolder(target.id);
+        if (fallback) {
+          setActiveFolderListing(fallback);
+        } else {
+          setFolderError(err instanceof Error ? err.message : 'تعذر فتح المجلد');
+        }
       } finally {
         setFolderLoading(false);
       }
     },
-    [folderTrail]
+    [folderTrail, resolveStaticFolder]
   );
 
   const handleOpenSubject = (subject: SubjectNode) => {

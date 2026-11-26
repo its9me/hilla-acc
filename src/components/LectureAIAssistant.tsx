@@ -181,6 +181,13 @@ export function LectureAIAssistant({
         }),
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(
+          'المساعد الذكي يحتاج إلى استضافة تدعم خادم Node.js (مثل Render.com مجاناً عبر ملف render.yaml) مع ضبط GEMINI_API_KEY؛ أما تصفح المحاضرات وقراءتها وتحميلها فيعمل هنا بشكل كامل.'
+        );
+      }
+
       const data = (await response.json()) as {
         answer?: string;
         fileAttached?: boolean;

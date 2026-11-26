@@ -18,9 +18,16 @@ npm run build
 npm start
 ```
 
-## النشر على الإنترنت مجاناً (GitHub + Render)
+## النشر على GitHub Pages مجاناً (تصفح وقراءة وتحميل المحاضرات)
 
-1. ارفع هذا المشروع إلى مستودع جديد في حسابك على **GitHub** (مع التأكد من عدم رفع `node_modules` أو `.env` — ملف `.gitignore` جاهز بالفعل).
+1. ارفع المشروع بالكامل إلى مستودع على **GitHub** (بما في ذلك مجلد `.github/workflows/deploy.yml`).
+2. افتح إعدادات المستودع: **Settings** ← **Pages**.
+3. من خانة **Build and deployment** ← **Source** اختر **GitHub Actions** (مهم جداً: لا تختر `Deploy from a branch` لأن ملفات React تحتاج للبناء أولاً وإلا ستظهر صفحة بيضاء).
+4. سيتم بناء الموقع ونشره تلقائياً خلال دقيقة واحدة على رابط `https://<username>.github.io/<repo-name>/`.
+
+## النشر الكامل على Render.com (يشمل التحديث التلقائي من Drive + المساعد الذكي Gemini AI)
+
+1. ارفع هذا المشروع إلى مستودع في حسابك على **GitHub** (مع التأكد من عدم رفع `node_modules` أو `.env` — ملف `.gitignore` جاهز بالفعل).
 2. سجّل الدخول إلى [Render.com](https://render.com) عبر حساب GitHub.
 3. اختر **New +** ← **Web Service** وحدد المستودع.
 4. اضبط الإعدادات التالية (أو استخدم ملف `render.yaml` الجاهز):
