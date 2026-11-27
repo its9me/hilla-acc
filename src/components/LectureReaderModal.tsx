@@ -19,6 +19,7 @@ import type { DriveCatalog, DriveEntry } from '../types/drive';
 import { getLectureDownloadProps, getLocalLectureUrl } from '../utils/lectures';
 import { FileTypeIcon } from './FileTypeIcon';
 import { LectureAIAssistant } from './LectureAIAssistant';
+import { LocalPdfViewer } from './LocalPdfViewer';
 
 export interface ViewerContextItem {
   entry: DriveEntry;
@@ -41,17 +42,6 @@ interface LectureReaderModalProps {
   onCopyLink: (id: string) => void;
 }
 
-function detectMobileBrowser(): boolean {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua)) {
-    return true;
-  }
-  return (
-    window.matchMedia?.('(pointer: coarse)').matches && window.innerWidth < 1024
-  );
-}
-
 export function LectureReaderModal({
   item,
   playlist,
@@ -66,19 +56,22 @@ export function LectureReaderModal({
   onChangeNote,
   onCopyLink,
 }: LectureReaderModalProps) {
-  const [isMobile] = useState(() => detectMobileBrowser());
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [noteSavedNotice, setNoteSavedNotice] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [panelTab, setPanelTab] = useState<'ai' | 'notes'>('ai');
   const [mobileView, setMobileView] = useState<'preview' | 'companion'>('preview');
-  const [useDriveViewer, setUseDriveViewer] = useState(
-    () => detectMobileBrowser() && item.entry.category === 'pdf'
-  );
+  const [useDriveViewer, setUseDriveViewer] = useState(false);
 
   const localUrl = getLocalLectureUrl(item.entry.id);
   const downloadProps = getLectureDownloadProps(item.entry);
+  const isLocalPdf = Boolean(
+    localUrl && (item.entry.category === 'pdf' || /\.pdf$/i.test(localUrl))
+  );
+  const isLocalImage = Boolean(
+    localUrl && (item.entry.category === 'image' || /\.(?:png|jpe?g|webp|gif)$/i.test(localUrl))
+  );
 
   const currentIndex = playlist.findIndex((p) => p.entry.id === item.entry.id);
   const prevItem = currentIndex > 0 ? playlist[currentIndex - 1] : null;
@@ -88,8 +81,8 @@ export function LectureReaderModal({
   useEffect(() => {
     setIframeLoaded(false);
     setLinkCopied(false);
-    setUseDriveViewer(isMobile && item.entry.category === 'pdf');
-  }, [item.entry.id, item.entry.category, isMobile]);
+    setUseDriveViewer(false);
+  }, [item.entry.id]);
 
   useEffect(() => {
     if (iframeLoaded) return;
@@ -195,7 +188,7 @@ export function LectureReaderModal({
               <span>تحميل</span>
             </a>
 
-            {localUrl && item.entry.category !== 'image' && (
+            {localUrl && (
               <button
                 type="button"
                 onClick={() => {
@@ -204,7 +197,7 @@ export function LectureReaderModal({
                 }}
                 className="hidden lg:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
               >
-                <span>{useDriveViewer ? 'العرض السريع' : 'عارض Drive'}</span>
+                <span>{useDriveViewer ? 'العارض السريع' : 'عارض Drive'}</span>
               </button>
             )}
 
@@ -284,8 +277,8 @@ export function LectureReaderModal({
               mobileView === 'preview' ? 'flex' : 'hidden lg:flex'
             } flex-col flex-1 min-h-0 bg-slate-100 dark:bg-slate-950`}
           >
-            {/* Mobile & Quick-Open Strip for PDFs */}
-            {localUrl && item.entry.category !== 'image' && (
+            {/* Mobile & Tablet Quick-Open Strip */}
+            {localUrl && (
               <div className="lg:hidden flex items-center justify-between gap-2 px-3 py-2 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 text-xs shrink-0">
                 <a
                   href={localUrl}
@@ -304,20 +297,30 @@ export function LectureReaderModal({
                   }}
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 rounded-lg whitespace-nowrap"
                 >
-                  <span>{useDriveViewer ? 'العرض السريع' : 'عارض Drive'}</span>
+                  <span>{useDriveViewer ? 'العارض السريع' : 'عارض Drive'}</span>
                 </button>
               </div>
             )}
 
             <div className="relative flex-1 min-h-0">
-              {localUrl && !useDriveViewer && item.entry.category === 'image' ? (
+              {isLocalImage && !useDriveViewer && localUrl ? (
                 <div className="w-full h-full overflow-auto flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-950">
                   <img
                     src={localUrl}
                     alt={item.entry.title}
+                    onError={() => setUseDriveViewer(true)}
                     className="max-w-full max-h-full object-contain rounded-lg shadow-sm"
                   />
                 </div>
+              ) : isLocalPdf && !useDriveViewer && localUrl ? (
+                <LocalPdfViewer
+                  url={localUrl}
+                  title={item.entry.title}
+                  onFallbackToDrive={() => {
+                    setIframeLoaded(false);
+                    setUseDriveViewer(true);
+                  }}
+                />
               ) : (
                 <>
                   {!iframeLoaded && (
@@ -340,8 +343,8 @@ export function LectureReaderModal({
                     </div>
                   )}
                   <iframe
-                    key={`${item.entry.id}-${useDriveViewer ? 'drive' : 'local'}`}
-                    src={localUrl && !useDriveViewer ? localUrl : item.entry.previewUrl}
+                    key={`${item.entry.id}-${useDriveViewer ? 'drive' : 'fallback'}`}
+                    src={item.entry.previewUrl}
                     title={item.entry.title}
                     className="w-full h-full border-0"
                     allow="autoplay; fullscreen"

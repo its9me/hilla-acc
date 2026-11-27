@@ -2,8 +2,12 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
+import {fileURLToPath} from 'url';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
   return {
@@ -57,7 +61,14 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,jpg,json}'],
-          globIgnores: ['lectures/**'],
+          globIgnores: ['lectures/**', 'pdfjs/**'],
+          cleanupOutdatedCaches: true,
+          navigateFallbackDenylist: [
+            /\/lectures\//i,
+            /\/pdfjs\//i,
+            /\/api\//i,
+            /\.(?:pdf|png|jpe?g|webp|gif|svg|ico|json|txt|xml|mjs|js|css|bcmap|pfb|ttf)$/i,
+          ],
           runtimeCaching: [
             {
               urlPattern: /\/lectures\/.*/i,
@@ -66,6 +77,20 @@ export default defineConfig(() => {
                 cacheName: 'local-lectures-cache',
                 expiration: {
                   maxEntries: 60,
+                  maxAgeSeconds: 60 * 60 * 24 * 30,
+                },
+                cacheableResponse: {
+                  statuses: [0, 200],
+                },
+              },
+            },
+            {
+              urlPattern: /\/pdfjs\/.*/i,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'pdfjs-assets-cache',
+                expiration: {
+                  maxEntries: 250,
                   maxAgeSeconds: 60 * 60 * 24 * 30,
                 },
                 cacheableResponse: {
@@ -123,9 +148,35 @@ export default defineConfig(() => {
           type: 'module',
         },
       }),
-      // Copies src/assets into dist/ so root-relative URLs like
-      // "/src/assets/images/..." (e.g. generate_image output) still resolve
-      // in production builds. Do not remove.
+      {
+        name: 'serve-pdfjs-support-assets',
+        apply: 'serve',
+        configureServer(server) {
+          const pdfjsRoot = path.resolve(__dirname, 'node_modules/pdfjs-dist');
+          server.middlewares.use('/pdfjs', (req, res, next) => {
+            const rawPath = (req.url || '').split('?')[0];
+            if (!rawPath.startsWith('/cmaps/') && !rawPath.startsWith('/standard_fonts/')) {
+              next();
+              return;
+            }
+            const cleanRel = path.posix.normalize(rawPath).replace(/^\/+/, '');
+            const targetFile = path.resolve(pdfjsRoot, cleanRel);
+            if (!targetFile.startsWith(pdfjsRoot) || !fs.existsSync(targetFile)) {
+              next();
+              return;
+            }
+            const stat = fs.statSync(targetFile);
+            if (!stat.isFile()) {
+              next();
+              return;
+            }
+            res.setHeader('Content-Type', 'application/octet-stream');
+            res.setHeader('Content-Length', String(stat.size));
+            fs.createReadStream(targetFile).pipe(res);
+          });
+        },
+      },
+      // Copies src/assets and pdfjs cmaps/standard_fonts into dist/ for offline & GitHub Pages support.
       {
         name: 'copy-unbundled-src-assets',
         apply: 'build',
@@ -138,6 +189,15 @@ export default defineConfig(() => {
           const distAssets = path.resolve(distDir, 'src/assets');
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
+          }
+
+          const pdfjsRoot = path.resolve(__dirname, 'node_modules/pdfjs-dist');
+          for (const folder of ['cmaps', 'standard_fonts']) {
+            const srcDir = path.join(pdfjsRoot, folder);
+            const destDir = path.join(distDir, 'pdfjs', folder);
+            if (fs.existsSync(distDir) && fs.existsSync(srcDir)) {
+              fs.cpSync(srcDir, destDir, {recursive: true, force: true});
+            }
           }
         },
       },
